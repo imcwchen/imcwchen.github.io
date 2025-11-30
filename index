@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能居家安全与环境IoT监测系统</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #e9ecef;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+            box-shadow: 0 0 10px #28a745;
+        }
+
+        .status-dot.disconnected {
+            background: #dc3545;
+        }
+
+        .status-dot.connecting {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .sensor-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .sensor-card.active {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #28a745;
+        }
+
+        .sensor-card.alert {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 2px solid #dc3545;
+            animation: alertPulse 2s infinite;
+        }
+
+        @keyframes alertPulse {
+            0%, 100% { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+            50% { box-shadow: 0 4px 20px rgba(220, 53, 69, 0.6); }
+        }
+
+        .sensor-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .sensor-title {
+            font-size: 1.1em;
+            color: #495057;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .sensor-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .sensor-status {
+            text-align: center;
+            font-size: 0.9em;
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .sensor-status.on {
+            background: #28a745;
+            color: white;
+        }
+
+        .sensor-status.off {
+            background: #6c757d;
+            color: white;
+        }
+
+        .sensor-status.detected {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .temperature-display {
+            text-align: center;
+            margin: 40px 0;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 30px;
+            border-radius: 15px;
+        }
+
+        .temperature-value {
+            font-size: 6em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .temperature-unit {
+            font-size: 3em;
+            color: #6c757d;
+            margin-left: 10px;
+        }
+
+        .chart-container {
+            margin-top: 40px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .alert-section {
+            margin-top: 30px;
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .alert-section h3 {
+            color: #856404;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #dc3545;
+            font-size: 0.9em;
+        }
+
+        .alert-item .alert-time {
+            color: #6c757d;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .alert-item .alert-message {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .message-log {
+            margin-top: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .message-log h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #495057;
+        }
+
+        .log-entry.error {
+            background: #fee;
+            color: #c33;
+        }
+
+        .log-entry.success {
+            background: #efe;
+            color: #3c3;
+        }
+
+        @media (max-width: 768px) {
+            .temperature-value {
+                font-size: 4em;
+            }
+
+            .temperature-unit {
+                font-size: 2em;
+            }
+
+            .status-bar {
+                flex-direction: column;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .sensors-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 智能居家安全与环境IoT监测系统</h1>
+            <p>Smart Home Security & Environment IoT Monitoring System</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot disconnected" id="mqttStatus"></span>
+                <span id="mqttStatusText">未连接</span>
+            </div>
+            <div class="status-item">
+                <span>传感器主题: <strong>/public/esp32/smart_home</strong></span>
+            </div>
+            <div class="status-item">
+                <span>消息数: <strong id="messageCount">0</strong></span>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- 温度显示 -->
+            <div class="temperature-display">
+                <div class="temperature-value">
+                    <span id="temperature">--</span>
+                    <span class="temperature-unit">°C</span>
+                </div>
+            </div>
+
+            <!-- 传感器状态卡片 -->
+            <div class="sensors-grid">
+                <!-- 智能灯光控制 -->
+                <div class="sensor-card" id="ledCard">
+                    <div class="sensor-icon">💡</div>
+                    <div class="sensor-title">智能灯光 (LED)</div>
+                    <div class="sensor-value" id="ledStatus">--</div>
+                    <div style="text-align: center;">
+                        <span class="sensor-status off" id="ledStatusBadge">OFF</span>
+                    </div>
+                </div>
+
+                <!-- 人员检测 -->
+                <div class="sensor-card" id="personCard">
+                    <div class="sensor-icon">👤</div>
+                    <div class="sensor-title">人员检测 (PIR)</div>
+                    <div class="sensor-value" id="personStatus">--</div>
+                    <div style="text-align: center;">
+                        <span class="sensor-status off" id="personStatusBadge">未检测</span>
+                    </div>
+                </div>
+
+                <!-- 光线检测 -->
+                <div class="sensor-card">
+                    <div class="sensor-icon">☀️</div>
+                    <div class="sensor-title">光线强度</div>
+                    <div class="sensor-value" id="lightValue">--</div>
+                    <div style="text-align: center; margin-top: 10px; color: #6c757d; font-size: 0.9em;">
+                        <span id="lightStatus">--</span>
+                    </div>
+                </div>
+
+                <!-- 震动检测 -->
+                <div class="sensor-card" id="vibrationCard">
+                    <div class="sensor-icon">⚠️</div>
+                    <div class="sensor-title">震动检测</div>
+                    <div class="sensor-value" id="vibrationStatus">--</div>
+                    <div style="text-align: center;">
+                        <span class="sensor-status off" id="vibrationStatusBadge">正常</span>
+                    </div>
+                </div>
+
+                <!-- 风扇控制 -->
+                <div class="sensor-card" id="fanCard">
+                    <div class="sensor-icon">🌀</div>
+                    <div class="sensor-title">自动排风 (风扇)</div>
+                    <div class="sensor-value" id="fanStatus">--</div>
+                    <div style="text-align: center;">
+                        <span class="sensor-status off" id="fanStatusBadge">OFF</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 报警信息 -->
+            <div class="alert-section" id="alertSection" style="display: none;">
+                <h3>🚨 报警信息</h3>
+                <div class="alert-list" id="alertList"></div>
+            </div>
+
+            <!-- 温度历史趋势图 -->
+            <div class="chart-container">
+                <div class="chart-title">温度历史趋势</div>
+                <canvas id="temperatureChart"></canvas>
+            </div>
+
+            <!-- 连接日志 -->
+            <div class="message-log">
+                <h3>连接日志</h3>
+                <div id="logContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MQTT配置
+        const MQTT_CONFIG = {
+            host: 'wss://lca0944f.ala.cn-hangzhou.emqxsl.cn:8084/mqtt',
+            topicSensor: '/public/esp32/smart_home',
+            topicAlert: '/public/esp32/smart_home/alert',
+            options: {
+                clientId: 'esp32-smart-home-web-' + Math.random().toString(16).substr(2, 8),
+                username: 'ESP32_Binkle',
+                password: '1234',
+                clean: true,
+                reconnectPeriod: 5000
+            }
+        };
+
+        // 状态变量
+        let mqttClient = null;
+        let messageCount = 0;
+        let chart = null;
+        let startTime = Date.now();
+        let alertCount = 0;
+
+        // 初始化图表
+        function initChart() {
+            const ctx = document.getElementById('temperatureChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新状态显示
+        function updateStatus(status, text) {
+            const statusDot = document.getElementById('mqttStatus');
+            const statusText = document.getElementById('mqttStatusText');
+            
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        // 添加日志
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry ' + type;
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        // 添加报警信息
+        function addAlert(alertType, message) {
+            const alertSection = document.getElementById('alertSection');
+            const alertList = document.getElementById('alertList');
+            
+            alertSection.style.display = 'block';
+            alertCount++;
+            
+            const alertItem = document.createElement('div');
+            alertItem.className = 'alert-item';
+            const timestamp = new Date().toLocaleString();
+            alertItem.innerHTML = `
+                <div class="alert-time">[${timestamp}] ${alertType}</div>
+                <div class="alert-message">${message}</div>
+            `;
+            alertList.insertBefore(alertItem, alertList.firstChild);
+            
+            // 限制报警数量
+            while (alertList.children.length > 20) {
+                alertList.removeChild(alertList.lastChild);
+            }
+            
+            // 浏览器通知
+            if (Notification.permission === 'granted') {
+                new Notification('智能居家系统报警', {
+                    body: message,
+                    icon: '🔔'
+                });
+            }
+        }
+
+        // 更新传感器数据显示
+        function updateSensorData(data) {
+            // 更新温度
+            document.getElementById('temperature').textContent = data.temperature ? data.temperature.toFixed(1) : '--';
+            
+            // 更新LED状态
+            const ledStatus = data.led_status === 'ON';
+            document.getElementById('ledStatus').textContent = ledStatus ? 'ON' : 'OFF';
+            document.getElementById('ledStatusBadge').textContent = ledStatus ? 'ON' : 'OFF';
+            document.getElementById('ledStatusBadge').className = 'sensor-status ' + (ledStatus ? 'on' : 'off');
+            document.getElementById('ledCard').className = 'sensor-card' + (ledStatus ? ' active' : '');
+            
+            // 更新人员检测
+            const hasPerson = data.person_detected === true;
+            document.getElementById('personStatus').textContent = hasPerson ? '检测到' : '未检测';
+            document.getElementById('personStatusBadge').textContent = hasPerson ? '检测到' : '未检测';
+            document.getElementById('personStatusBadge').className = 'sensor-status ' + (hasPerson ? 'detected' : 'off');
+            document.getElementById('personCard').className = 'sensor-card' + (hasPerson ? ' active' : '');
+            
+            // 更新光线值
+            const lightValue = data.light || 0;
+            document.getElementById('lightValue').textContent = lightValue;
+            const lightStatus = lightValue > 3500 ? '昏暗' : '明亮';
+            document.getElementById('lightStatus').textContent = lightStatus;
+            
+            // 更新震动检测
+            const hasVibration = data.vibration === true;
+            document.getElementById('vibrationStatus').textContent = hasVibration ? '检测到' : '正常';
+            document.getElementById('vibrationStatusBadge').textContent = hasVibration ? '报警' : '正常';
+            document.getElementById('vibrationStatusBadge').className = 'sensor-status ' + (hasVibration ? 'detected' : 'off');
+            document.getElementById('vibrationCard').className = 'sensor-card' + (hasVibration ? ' alert' : '');
+            
+            // 更新风扇状态
+            const fanStatus = data.fan_status === 'ON';
+            document.getElementById('fanStatus').textContent = fanStatus ? 'ON' : 'OFF';
+            document.getElementById('fanStatusBadge').textContent = fanStatus ? 'ON' : 'OFF';
+            document.getElementById('fanStatusBadge').className = 'sensor-status ' + (fanStatus ? 'on' : 'off');
+            document.getElementById('fanCard').className = 'sensor-card' + (fanStatus ? ' active' : '');
+            
+            // 更新温度图表
+            if (data.temperature) {
+                const now = new Date();
+                const timeLabel = now.toLocaleTimeString();
+                chart.data.labels.push(timeLabel);
+                chart.data.datasets[0].data.push(data.temperature);
+                
+                if (chart.data.labels.length > 50) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                
+                chart.update('none');
+            }
+            
+            // 更新消息计数
+            messageCount++;
+            document.getElementById('messageCount').textContent = messageCount;
+        }
+
+        // 连接MQTT服务器
+        function connectMQTT() {
+            updateStatus('connecting', '正在连接...');
+            addLog('正在连接到MQTT服务器...', 'info');
+            
+            try {
+                mqttClient = mqtt.connect(MQTT_CONFIG.host, MQTT_CONFIG.options);
+                
+                mqttClient.on('connect', () => {
+                    updateStatus('connected', '已连接');
+                    addLog('成功连接到MQTT服务器!', 'success');
+                    
+                    // 订阅传感器数据主题
+                    mqttClient.subscribe(MQTT_CONFIG.topicSensor, (err) => {
+                        if (err) {
+                            addLog(`订阅传感器主题失败: ${err.message}`, 'error');
+                        } else {
+                            addLog(`已订阅传感器主题: ${MQTT_CONFIG.topicSensor}`, 'success');
+                        }
+                    });
+                    
+                    // 订阅报警主题
+                    mqttClient.subscribe(MQTT_CONFIG.topicAlert, (err) => {
+                        if (err) {
+                            addLog(`订阅报警主题失败: ${err.message}`, 'error');
+                        } else {
+                            addLog(`已订阅报警主题: ${MQTT_CONFIG.topicAlert}`, 'success');
+                        }
+                    });
+                });
+                
+                mqttClient.on('message', (topic, message) => {
+                    try {
+                        const data = JSON.parse(message.toString());
+                        
+                        if (topic === MQTT_CONFIG.topicSensor) {
+                            // 传感器数据
+                            addLog(`收到传感器数据: 温度${data.temperature}°C`, 'success');
+                            updateSensorData(data);
+                        } else if (topic === MQTT_CONFIG.topicAlert) {
+                            // 报警消息
+                            addLog(`收到报警消息: ${data.message}`, 'error');
+                            addAlert(data.alert_type || 'Alert', data.message || 'Unknown alert');
+                        }
+                    } catch (e) {
+                        addLog(`解析消息错误: ${e.message}`, 'error');
+                        addLog(`原始消息: ${message.toString()}`, 'info');
+                    }
+                });
+                
+                mqttClient.on('error', (error) => {
+                    updateStatus('disconnected', '连接错误');
+                    addLog(`MQTT错误: ${error.message}`, 'error');
+                });
+                
+                mqttClient.on('close', () => {
+                    updateStatus('disconnected', '已断开');
+                    addLog('MQTT连接已关闭，正在尝试重连...', 'error');
+                });
+                
+                mqttClient.on('offline', () => {
+                    updateStatus('disconnected', '离线');
+                    addLog('MQTT客户端离线，正在尝试重连...', 'error');
+                });
+                
+                mqttClient.on('reconnect', () => {
+                    updateStatus('connecting', '正在重连...');
+                    addLog('正在重新连接MQTT服务器...', 'info');
+                });
+                
+            } catch (error) {
+                updateStatus('disconnected', '连接失败');
+                addLog(`连接错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 请求浏览器通知权限
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            addLog('网页已加载，正在初始化...', 'info');
+            connectMQTT();
+        });
+
+        // 页面关闭时断开连接
+        window.addEventListener('beforeunload', () => {
+            if (mqttClient) {
+                mqttClient.end();
+            }
+        });
+    </script>
+</body>
+</html>
